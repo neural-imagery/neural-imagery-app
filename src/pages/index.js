@@ -11,7 +11,7 @@ import {
   EllipsePointMarker,
   SweepAnimation,
   SciChartJsNavyTheme,
-  SciChartJSLightTheme,
+  SciChartJsTheme,
   NumberRange,
   LogarithmicAxis,
   ENumericFormat,
@@ -87,20 +87,20 @@ async function initSciChart(data, divId, colour) {
       animation: new SweepAnimation({ duration: 300, fadeEffect: true }),
     })
   );
-  let frameCounter = 0;
-  const updateChart = () => {
-    if (frameCounter > data.length - 512) {
-      frameCounter = 0;
-    }
-    // if (!dataProvider.isDeleted) {
-    let y = doFFT(data.slice(frameCounter, frameCounter + 512));
-    let x = y.map((value, index) => index * 0.01);
-    updateAnalysers(x, y);
-    frameCounter++;
-    let timerId = setTimeout(updateChart, 20);
-    // }
-  };
-  updateChart();
+  // let frameCounter = 0;
+  // const updateChart = () => {
+  //   if (frameCounter > data.length - 512) {
+  //     frameCounter = 0;
+  //   }
+  //   // if (!dataProvider.isDeleted) {
+  //   let y = doFFT(data.slice(frameCounter, frameCounter + 512));
+  //   let x = y.map((value, index) => index * 0.01);
+  //   updateAnalysers(x, y);
+  //   frameCounter++;
+  //   let timerId = setTimeout(updateChart, 20);
+  //   // }
+  // };
+  // updateChart();
 
   return sciChartSurface;
 }
@@ -120,65 +120,64 @@ function doFFT(data) {
 
 export default function Home() {
   const [json, setJsonData] = useState(null);
+  const [noise, setNoiseData] = useState(null);
+  // json will be set to the FFT data
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const response = await fetch("/data1.json");
-        if (!response.ok) {
-          throw new Error("Network response was not ok");
-        }
-        const data = await response.json();
+    // WebSocket URL - Replace with your WebSocket server URL
+    const socketURL = "ws://35.186.191.80:8080/";
+    // Create a WebSocket connection
+    const socket = new WebSocket(socketURL);
 
-        // const psdData = doFFT(data);
+    // Handle incoming messages
+    socket.addEventListener("message", (event) => {
+      console.log(`event ${event}`);
+      let data = event.data;
+      let parsed = JSON.parse(data);
+      setJsonData(parsed);
+      const psdData = doFFT(parsed["data"]);
+      const noiseFFT = doFFT(parsed["noise"]);
+      setJsonData(psdData);
+      setNoiseData(noiseFFT);
+    });
+    // async function fetchData() {
+    //   try {
+    //     const response = await fetch("/data1.json");
+    //     if (!response.ok) {
+    //       throw new Error("Network response was not ok");
+    //     }
+    //     const data = await response.json();
 
-        setJsonData(data);
+    //     // const psdData = doFFT(data);
 
-        // setJsonData(psdData);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      }
-    }
+    //     setJsonData(data);
 
-    fetchData();
+    //     // setJsonData(psdData);
+    //   } catch (error) {
+    //     console.error("Error fetching data:", error);
+    //   }
+    // }
+    // fetchData();
   }, []);
   useEffect(() => {
     if (!json) return;
-    // console.log(json);
     const chartInitializationPromise = initSciChart(
-      json["sig"],
+      json,
       "scichart-root",
       "steelblue"
     );
-    const another = initSciChart(json["noise"], "another", "white");
+    const another = initSciChart(noise, "another", "white");
   }, [json]);
   return (
     <main
       className={`flex min-h-screen flex-col items-center justify-between p-24 ${inter.className}`}
     >
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
+      <div className="z-10 max-w-7xl w-full items-center justify-between font-mono text-sm">
         <h2>Power Spectral Density (PSD)</h2>
-        {/* {psd && (
-          <Plot
-            data={[
-              {
-                x: psd.map((value, index) => index), // X-axis: Frequency bins
-                y: psd, // Y-axis: PSD values
-                type: "scatter",
-                mode: "lines",
-                marker: { color: "blue" },
-              },
-            ]}
-            layout={{
-              title: "PSD Plot",
-              xaxis: { title: "Frequency Bin" },
-              yaxis: { title: "PSD" },
-            }}
-          />
-        )} */}
-
-        <div id="scichart-root" style={{ maxWidth: 900 }} />
-        <div id="another" style={{ maxWidth: 900 }} />
+        <div className="flex flex-wrap space-between">
+          <div id="scichart-root" className="charts" />
+          <div id="another" className="charts" />
+        </div>
       </div>
     </main>
   );
