@@ -4,6 +4,10 @@ import React, { useEffect, useState } from "react";
 import FFT from "fft.js";
 // import Plot from "react-plotly.js";
 import {
+  EAutoRange,
+  UniformHeatmapDataSeries,
+  UniformHeatmapRenderableSeries,
+  HeatmapColorMap,
   SciChartSurface,
   NumericAxis,
   FastLineRenderableSeries,
@@ -16,6 +20,9 @@ import {
   LogarithmicAxis,
   ENumericFormat,
 } from "scichart";
+
+const fftCount = 50;
+const fftSize = 512;
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -32,6 +39,15 @@ async function initCharts() {
   );
   const xyDS2 = await initFFTChart(Array(512).fill(0), "another", "white");
 
+  let spectrogramValues = new Array(fftCount);
+  for (let i = 0; i < fftCount; i++) {
+    spectrogramValues[i] = new Array(fftSize);
+    for (let j = 0; j < fftSize; j++) {
+      spectrogramValues[i][j] = 0;
+    }
+  }
+  const spectrogramDS = await initSpectogramChart(spectrogramValues);
+
   // Handle incoming messages
   socket.addEventListener("message", (event) => {
     console.log(`event ${event}`);
@@ -40,10 +56,19 @@ async function initCharts() {
     const psdData = doFFT(parsed["data"]);
     const noiseFFT = doFFT(parsed["noise"]);
     let x = psdData.map((value, index) => index * 0.01);
+    // update FFT charts
     xyDS.clear();
     xyDS.appendRange(x, psdData);
     xyDS2.clear();
     xyDS2.appendRange(x, noiseFFT);
+    // update spectrogram
+    // console.log(psdData);
+    // print max of psdData
+    let max = Math.max(...psdData);
+    console.log(max);
+    spectrogramValues.shift();
+    spectrogramValues.push(psdData);
+    spectrogramDS.setZValues(spectrogramValues);
   });
 }
 async function initFFTChart(data, divId, colour) {
@@ -123,6 +148,59 @@ function doFFT(data) {
   return spectrum.map((value) => Math.pow(value, 2)).slice(0, signal.length);
 }
 
+async function initSpectogramChart(spectrogramValues) {
+  const { sciChartSurface, wasmContext } = await SciChartSurface.create(
+    "spectrogram",
+    {
+      theme: new SciChartJsNavyTheme(),
+      title: "Spectrogram Chart",
+      titleStyle: { fontSize: 14 },
+    }
+  );
+
+  const xAxis = new NumericAxis(wasmContext, {
+    autoRange: EAutoRange.Always,
+    drawLabels: false,
+    drawMinorTickLines: false,
+    drawMajorTickLines: false,
+  });
+  sciChartSurface.xAxes.add(xAxis);
+
+  const yAxis = new NumericAxis(wasmContext, {
+    autoRange: EAutoRange.Always,
+    drawLabels: false,
+    drawMinorTickLines: false,
+    drawMajorTickLines: false,
+  });
+  sciChartSurface.yAxes.add(yAxis);
+
+  let spectrogramDS = new UniformHeatmapDataSeries(wasmContext, {
+    xStart: 0,
+    xStep: 1,
+    yStart: 0,
+    yStep: 1,
+    zValues: spectrogramValues,
+  });
+
+  const rs = new UniformHeatmapRenderableSeries(wasmContext, {
+    dataSeries: spectrogramDS,
+    colorMap: new HeatmapColorMap({
+      minimum: 0,
+      maximum: 5000000000, // TODO EDIT THIS TO FIT DATA
+      gradientStops: [
+        { offset: 0, color: "#000000" },
+        { offset: 0.25, color: "#800080" },
+        { offset: 0.5, color: "#FF0000" },
+        { offset: 0.75, color: "#FFFF00" },
+        { offset: 1, color: "#FFFFFF" },
+      ],
+    }),
+  });
+  sciChartSurface.renderableSeries.add(rs);
+
+  return spectrogramDS;
+}
+
 export default function Home() {
   const [json, setJsonData] = useState(null);
   const [noise, setNoiseData] = useState(null);
@@ -140,6 +218,7 @@ export default function Home() {
         <div className="flex flex-wrap space-between">
           <div id="scichart-root" className="charts" />
           <div id="another" className="charts" />
+          <div id="spectrogram" className="charts" />
         </div>
       </div>
     </main>
