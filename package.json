@@ -19,5 +19,8 @@
     "react-plotly.js": "^2.6.0",
     "scichart": "^3.2.464",
     "tailwindcss": "3.3.3"
+  },
+  "devDependencies": {
+    "copy-webpack-plugin": "^11.0.0"
   }
 }
