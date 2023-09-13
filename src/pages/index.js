@@ -19,8 +19,34 @@ import {
 
 const inter = Inter({ subsets: ["latin"] });
 
-async function initSciChart(data, divId, colour) {
-  let fftDS;
+async function initCharts() {
+  // WebSocket URL - Replace with your WebSocket server URL
+  const socketURL = "ws://35.186.191.80:8080/";
+  // Create a WebSocket connection
+  const socket = new WebSocket(socketURL);
+
+  const xyDS = await initFFTChart(
+    Array(512).fill(0),
+    "scichart-root",
+    "steelblue"
+  );
+  const xyDS2 = await initFFTChart(Array(512).fill(0), "another", "white");
+
+  // Handle incoming messages
+  socket.addEventListener("message", (event) => {
+    console.log(`event ${event}`);
+    let data = event.data;
+    let parsed = JSON.parse(data);
+    const psdData = doFFT(parsed["data"]);
+    const noiseFFT = doFFT(parsed["noise"]);
+    let x = psdData.map((value, index) => index * 0.01);
+    xyDS.clear();
+    xyDS.appendRange(x, psdData);
+    xyDS2.clear();
+    xyDS2.appendRange(x, noiseFFT);
+  });
+}
+async function initFFTChart(data, divId, colour) {
   // LICENSING
   // Commercial licenses set your license code here
   // Purchased license keys can be viewed at https://www.scichart.com/profile
@@ -35,17 +61,10 @@ async function initSciChart(data, divId, colour) {
     title: "Power spectrum of signal",
     titleStyle: { fontSize: 14 },
   });
-  fftDS = new XyDataSeries(wasmContext, {
+  let fftDS = new XyDataSeries(wasmContext, {
     xValues: data.map((value, index) => index * 0.01),
     yValues: data,
   });
-
-  function updateAnalysers(fftXValues, fftData) {
-    // Update FFT Chart. Clear() and appendRange() is a fast replace for data (if same size)
-    fftDS.clear();
-    // console.log({ fftXValues, fftData });
-    fftDS.appendRange(fftXValues, fftData);
-  }
 
   // Create an XAxis and YAxis with growBy padding
   const growBy = new NumberRange(0.1, 0.1);
@@ -87,22 +106,8 @@ async function initSciChart(data, divId, colour) {
       animation: new SweepAnimation({ duration: 300, fadeEffect: true }),
     })
   );
-  // let frameCounter = 0;
-  // const updateChart = () => {
-  //   if (frameCounter > data.length - 512) {
-  //     frameCounter = 0;
-  //   }
-  //   // if (!dataProvider.isDeleted) {
-  //   let y = doFFT(data.slice(frameCounter, frameCounter + 512));
-  //   let x = y.map((value, index) => index * 0.01);
-  //   updateAnalysers(x, y);
-  //   frameCounter++;
-  //   let timerId = setTimeout(updateChart, 20);
-  //   // }
-  // };
-  // updateChart();
 
-  return sciChartSurface;
+  return fftDS;
 }
 
 function doFFT(data) {
@@ -124,50 +129,8 @@ export default function Home() {
   // json will be set to the FFT data
 
   useEffect(() => {
-    // WebSocket URL - Replace with your WebSocket server URL
-    const socketURL = "ws://35.186.191.80:8080/";
-    // Create a WebSocket connection
-    const socket = new WebSocket(socketURL);
-
-    // Handle incoming messages
-    socket.addEventListener("message", (event) => {
-      console.log(`event ${event}`);
-      let data = event.data;
-      let parsed = JSON.parse(data);
-      setJsonData(parsed);
-      const psdData = doFFT(parsed["data"]);
-      const noiseFFT = doFFT(parsed["noise"]);
-      setJsonData(psdData);
-      setNoiseData(noiseFFT);
-    });
-    // async function fetchData() {
-    //   try {
-    //     const response = await fetch("/data1.json");
-    //     if (!response.ok) {
-    //       throw new Error("Network response was not ok");
-    //     }
-    //     const data = await response.json();
-
-    //     // const psdData = doFFT(data);
-
-    //     setJsonData(data);
-
-    //     // setJsonData(psdData);
-    //   } catch (error) {
-    //     console.error("Error fetching data:", error);
-    //   }
-    // }
-    // fetchData();
+    let promise = initCharts();
   }, []);
-  useEffect(() => {
-    if (!json) return;
-    const chartInitializationPromise = initSciChart(
-      json,
-      "scichart-root",
-      "steelblue"
-    );
-    const another = initSciChart(noise, "another", "white");
-  }, [json]);
   return (
     <main
       className={`flex min-h-screen flex-col items-center justify-between p-24 ${inter.className}`}
