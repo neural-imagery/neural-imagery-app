@@ -28,7 +28,8 @@ const inter = Inter({ subsets: ["latin"] });
 
 async function initCharts() {
   // WebSocket URL - Replace with your WebSocket server URL
-  const socketURL = "ws://35.186.191.80:8080/";
+  // TODO change this to 35.186.191.80:8080 if non running server locally
+  const socketURL = "ws://127.0.0.1:8080/";
   // Create a WebSocket connection
   const socket = new WebSocket(socketURL);
 
@@ -50,11 +51,11 @@ async function initCharts() {
 
   // Handle incoming messages
   socket.addEventListener("message", (event) => {
-    console.log(`event ${event}`);
+    console.log(`received data ${event}`);
     let data = event.data;
     let parsed = JSON.parse(data);
-    const psdData = doFFT(parsed["data"]);
-    const noiseFFT = doFFT(parsed["noise"]);
+    const psdData = doFFT(parsed["d"][0]["data"]);
+    const noiseFFT = doFFT(parsed["d"][0]["noise"]);
     let x = psdData.map((value, index) => index * 0.01);
     // update FFT charts
     xyDS.clear();
@@ -65,7 +66,7 @@ async function initCharts() {
     // console.log(psdData);
     // print max of psdData
     let max = Math.max(...psdData);
-    console.log(max);
+    console.log("max value: ", max);
     spectrogramValues.shift();
     spectrogramValues.push(psdData);
     spectrogramDS.setZValues(spectrogramValues);
@@ -186,7 +187,7 @@ async function initSpectogramChart(spectrogramValues) {
     dataSeries: spectrogramDS,
     colorMap: new HeatmapColorMap({
       minimum: 0,
-      maximum: 5000000000, // TODO EDIT THIS TO FIT DATA
+      maximum: 500000000, // TODO take printed max value, reduce by 2-3 orders of magnitude
       gradientStops: [
         { offset: 0, color: "#000000" },
         { offset: 0.25, color: "#800080" },
