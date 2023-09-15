@@ -27,7 +27,12 @@ body {
 }
 
 .charts {
-  max-width: 300px;
+  max-width: 320px;
   width: 100%;
   margin-right: 4px;
+}
+
+h2 {
+  font-size: 1rem;
+  font-weight: 600;
 }

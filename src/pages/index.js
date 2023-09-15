@@ -15,7 +15,6 @@ import {
   EllipsePointMarker,
   SweepAnimation,
   SciChartJsNavyTheme,
-  SciChartJsTheme,
   NumberRange,
   LogarithmicAxis,
   ENumericFormat,
@@ -31,6 +30,47 @@ const showFFTs = false;
 const showSpectrograms = true;
 
 const inter = Inter({ subsets: ["latin"] });
+
+let scalpCouplingIndices = new Array(numChannels / 2).fill(0);
+
+// TODO dictionary of source-detector pair (1-16) to corresp channel numbers (0-31)
+const SDPairToChannel = {
+  1: [0, 1],
+  2: [2, 3],
+  3: [4, 5],
+  4: [6, 7],
+  5: [8, 9],
+  6: [10, 11],
+  7: [12, 13],
+  8: [14, 15],
+  9: [16, 17],
+  10: [18, 19],
+  11: [20, 21],
+  12: [22, 23],
+  13: [24, 25],
+  14: [26, 27],
+  15: [28, 29],
+  16: [30, 31],
+};
+
+const SDPairToDescription = {
+  1: "S1 <> D1",
+  2: "S1 <> D2",
+  3: "S1 <> D3",
+  4: "S1 <> D4",
+  5: "S2 <> D1",
+  6: "S2 <> D2",
+  7: "S2 <> D3",
+  8: "S2 <> D4",
+  9: "S3 <> D5",
+  10: "S3 <> D6",
+  11: "S3 <> D7",
+  12: "S3 <> D8",
+  13: "S4 <> D5",
+  14: "S4 <> D6",
+  15: "S4 <> D7",
+  16: "S4 <> D8",
+};
 
 async function initCharts() {
   // WebSocket URL -  35.186.191.80:8080 if external server, 127.0.0.1:8080 if local
@@ -50,14 +90,10 @@ async function initCharts() {
       xyDScharts.push(xyDS);
     }
     if (showSpectrograms) {
-      let spectrogramValues = new Array(fftCount);
       // initialize spectrogram values to a fftCount x fftSize array of 0s
-      for (let i = 0; i < fftCount; i++) {
-        spectrogramValues[i] = new Array(fftSize);
-        for (let j = 0; j < fftSize; j++) {
-          spectrogramValues[i][j] = 0;
-        }
-      }
+      let spectrogramValues = Array(fftCount)
+        .fill()
+        .map(() => Array(fftSize).fill(0));
       const spectrogramDS = await initSpectrogramChart(
         spectrogramValues,
         `spectrogram-${i}`
@@ -91,8 +127,10 @@ async function initCharts() {
         }
       }
     }
+    // TODO update scalpCouplingIndices
   });
 }
+
 async function initFFTChart(data, divId, colour) {
   // LICENSING
   // Commercial licenses set your license code here
@@ -105,8 +143,8 @@ async function initFFTChart(data, divId, colour) {
   // Initialize SciChartSurface. Don't forget to await!
   const { sciChartSurface, wasmContext } = await SciChartSurface.create(divId, {
     theme: new SciChartJsNavyTheme(),
-    title: "Power spectrum of signal",
-    titleStyle: { fontSize: 14 },
+    title: "Power spectrum of signal " + divId.slice(-1),
+    titleStyle: { fontSize: 14, padding: 0 },
   });
   let fftDS = new XyDataSeries(wasmContext, {
     xValues: data.map((value, index) => index * freqSpacing),
@@ -173,8 +211,8 @@ function doFFT(data) {
 async function initSpectrogramChart(spectrogramValues, divId) {
   const { sciChartSurface, wasmContext } = await SciChartSurface.create(divId, {
     theme: new SciChartJsNavyTheme(),
-    title: divId,
-    titleStyle: { fontSize: 14 },
+    title: "Spectrogram " + divId.slice(-1),
+    titleStyle: { fontSize: 12, placeWithinChart: true },
   });
 
   const xAxis = new NumericAxis(wasmContext, {
@@ -226,12 +264,11 @@ export default function Home() {
   }, []);
   return (
     <main
-      className={`flex min-h-screen flex-col items-center justify-between p-24 ${inter.className}`}
+      className={`flex min-h-screen flex-col items-center justify-between p-16 ${inter.className}`}
     >
-      <div className="z-10 max-w-7xl w-full items-center justify-between font-mono text-sm">
-        <h2>Power Spectral Density (PSD)</h2>
+      <div className="z-10 max-w-8xl w-full items-center justify-between font-mono text-sm">
+        <h2>Power Spectral Density (PSD) & Spectrograms</h2>
         <div className="flex flex-wrap space-between">
-          {/* create numChannels divs */}
           {showFFTs &&
             Array(numChannels)
               .fill(0)
@@ -240,11 +277,17 @@ export default function Home() {
               ))}
 
           {showSpectrograms &&
-            Array(numChannels)
-              .fill(0)
-              .map((_, i) => (
-                <div key={i} id={`spectrogram-${i}`} className="charts" />
-              ))}
+            Object.keys(SDPairToChannel).map((key) => (
+              <div className="charts">
+                <h3 className="text-center">
+                  SD Pair {key} ({SDPairToDescription[key]}) Score{" "}
+                  {scalpCouplingIndices[key]}
+                </h3>
+                {SDPairToChannel[key].map((channel, _) => (
+                  <div key={channel} id={`spectrogram-${channel}`} />
+                ))}
+              </div>
+            ))}
         </div>
       </div>
     </main>
