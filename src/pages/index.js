@@ -22,54 +22,75 @@ import {
 } from "scichart";
 
 const fftCount = 50;
-const fftSize = 512;
+const fftSize = 128; // TODO SET SAME VALUE ON SERVER
+const sampleRate = 10;
+const freqSpacing = sampleRate / 2 / fftSize;
+const numChannels = 32;
+
+const showFFTs = false;
+const showSpectrograms = true;
 
 const inter = Inter({ subsets: ["latin"] });
 
 async function initCharts() {
-  // WebSocket URL - Replace with your WebSocket server URL
-  // TODO change this to 35.186.191.80:8080 if non running server locally
-  const socketURL = "ws://127.0.0.1:8080/";
+  // WebSocket URL -  35.186.191.80:8080 if external server, 127.0.0.1:8080 if local
+  const socketURL = "ws://35.186.191.80:8080/";
   // Create a WebSocket connection
   const socket = new WebSocket(socketURL);
-
-  const xyDS = await initFFTChart(
-    Array(512).fill(0),
-    "scichart-root",
-    "steelblue"
-  );
-  const xyDS2 = await initFFTChart(Array(512).fill(0), "another", "white");
-
-  let spectrogramValues = new Array(fftCount);
-  for (let i = 0; i < fftCount; i++) {
-    spectrogramValues[i] = new Array(fftSize);
-    for (let j = 0; j < fftSize; j++) {
-      spectrogramValues[i][j] = 0;
+  let xyDScharts = [];
+  let spectrogramDScharts = [];
+  let spectrogramValuesAllChannels = [];
+  for (let i = 0; i < numChannels; i++) {
+    if (showFFTs) {
+      const xyDS = await initFFTChart(
+        Array(fftSize).fill(0),
+        `scichart-root-${i}`,
+        "steelblue"
+      );
+      xyDScharts.push(xyDS);
+    }
+    if (showSpectrograms) {
+      let spectrogramValues = new Array(fftCount);
+      // initialize spectrogram values to a fftCount x fftSize array of 0s
+      for (let i = 0; i < fftCount; i++) {
+        spectrogramValues[i] = new Array(fftSize);
+        for (let j = 0; j < fftSize; j++) {
+          spectrogramValues[i][j] = 0;
+        }
+      }
+      const spectrogramDS = await initSpectrogramChart(
+        spectrogramValues,
+        `spectrogram-${i}`
+      );
+      spectrogramDScharts.push(spectrogramDS);
+      spectrogramValuesAllChannels.push(spectrogramValues);
     }
   }
-  const spectrogramDS = await initSpectogramChart(spectrogramValues);
 
   // Handle incoming messages
   socket.addEventListener("message", (event) => {
     console.log(`received data ${event}`);
     let data = event.data;
     let parsed = JSON.parse(data);
-    const psdData = doFFT(parsed["d"][0]["data"]);
-    const noiseFFT = doFFT(parsed["d"][0]["noise"]);
-    let x = psdData.map((value, index) => index * 0.01);
-    // update FFT charts
-    xyDS.clear();
-    xyDS.appendRange(x, psdData);
-    xyDS2.clear();
-    xyDS2.appendRange(x, noiseFFT);
-    // update spectrogram
-    // console.log(psdData);
-    // print max of psdData
-    let max = Math.max(...psdData);
-    console.log("max value: ", max);
-    spectrogramValues.shift();
-    spectrogramValues.push(psdData);
-    spectrogramDS.setZValues(spectrogramValues);
+    // console.log("parsed", parsed[1]);
+    // update FFT and spectrogram charts
+    for (let i = 0; i < numChannels; i++) {
+      if (parsed[i]) {
+        const psdData = doFFT(parsed[i]);
+        let x = psdData.map((value, index) => index * freqSpacing);
+        if (showFFTs) {
+          xyDScharts[i].clear();
+          xyDScharts[i].appendRange(x, psdData);
+        }
+        let max = Math.max(...psdData);
+        console.log("max value: ", max);
+        if (showSpectrograms) {
+          spectrogramValuesAllChannels[i].shift(); // TODO array of spectrogram values
+          spectrogramValuesAllChannels[i].push(psdData);
+          spectrogramDScharts[i].setZValues(spectrogramValuesAllChannels[i]);
+        }
+      }
+    }
   });
 }
 async function initFFTChart(data, divId, colour) {
@@ -88,7 +109,7 @@ async function initFFTChart(data, divId, colour) {
     titleStyle: { fontSize: 14 },
   });
   let fftDS = new XyDataSeries(wasmContext, {
-    xValues: data.map((value, index) => index * 0.01),
+    xValues: data.map((value, index) => index * freqSpacing),
     yValues: data,
   });
 
@@ -137,7 +158,7 @@ async function initFFTChart(data, divId, colour) {
 }
 
 function doFFT(data) {
-  const signal = data.slice(0, 512);
+  const signal = data.slice(0, fftSize);
   const fft = new FFT(signal.length);
 
   // Extend the signal with zeros to match the FFT size
@@ -149,15 +170,12 @@ function doFFT(data) {
   return spectrum.map((value) => Math.pow(value, 2)).slice(0, signal.length);
 }
 
-async function initSpectogramChart(spectrogramValues) {
-  const { sciChartSurface, wasmContext } = await SciChartSurface.create(
-    "spectrogram",
-    {
-      theme: new SciChartJsNavyTheme(),
-      title: "Spectrogram Chart",
-      titleStyle: { fontSize: 14 },
-    }
-  );
+async function initSpectrogramChart(spectrogramValues, divId) {
+  const { sciChartSurface, wasmContext } = await SciChartSurface.create(divId, {
+    theme: new SciChartJsNavyTheme(),
+    title: divId,
+    titleStyle: { fontSize: 14 },
+  });
 
   const xAxis = new NumericAxis(wasmContext, {
     autoRange: EAutoRange.Always,
@@ -187,7 +205,7 @@ async function initSpectogramChart(spectrogramValues) {
     dataSeries: spectrogramDS,
     colorMap: new HeatmapColorMap({
       minimum: 0,
-      maximum: 500000000, // TODO take printed max value, reduce by 2-3 orders of magnitude
+      maximum: 503345012, // TODO take printed max value, reduce by 2-3 orders of magnitude
       gradientStops: [
         { offset: 0, color: "#000000" },
         { offset: 0.25, color: "#800080" },
@@ -203,10 +221,6 @@ async function initSpectogramChart(spectrogramValues) {
 }
 
 export default function Home() {
-  const [json, setJsonData] = useState(null);
-  const [noise, setNoiseData] = useState(null);
-  // json will be set to the FFT data
-
   useEffect(() => {
     let promise = initCharts();
   }, []);
@@ -217,9 +231,20 @@ export default function Home() {
       <div className="z-10 max-w-7xl w-full items-center justify-between font-mono text-sm">
         <h2>Power Spectral Density (PSD)</h2>
         <div className="flex flex-wrap space-between">
-          <div id="scichart-root" className="charts" />
-          <div id="another" className="charts" />
-          <div id="spectrogram" className="charts" />
+          {/* create numChannels divs */}
+          {showFFTs &&
+            Array(numChannels)
+              .fill(0)
+              .map((_, i) => (
+                <div key={i} id={`scichart-root-${i}`} className="charts" />
+              ))}
+
+          {showSpectrograms &&
+            Array(numChannels)
+              .fill(0)
+              .map((_, i) => (
+                <div key={i} id={`spectrogram-${i}`} className="charts" />
+              ))}
         </div>
       </div>
     </main>
