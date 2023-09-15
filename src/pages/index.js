@@ -28,10 +28,10 @@ const numChannels = 32;
 
 const showFFTs = false;
 const showSpectrograms = true;
+const showCouplingIndices = true;
+const couplingIndexWindow = 50;
 
 const inter = Inter({ subsets: ["latin"] });
-
-let scalpCouplingIndices = new Array(numChannels / 2).fill(0);
 
 // TODO dictionary of source-detector pair (1-16) to corresp channel numbers (0-31)
 const SDPairToChannel = {
@@ -77,9 +77,29 @@ async function initCharts() {
   const socketURL = "ws://35.186.191.80:8080/";
   // Create a WebSocket connection
   const socket = new WebSocket(socketURL);
+  // Create another socket URL and connection
+  const anotherSocketURL = "ws://35.186.191.80:8081/";
+  const anotherSocket = new WebSocket(anotherSocketURL);
   let xyDScharts = [];
   let spectrogramDScharts = [];
   let spectrogramValuesAllChannels = [];
+  let indexCharts = [];
+  let scalpCouplingIndices = [];
+
+  if (showCouplingIndices) {
+    for (let i = 0; i < numChannels / 2; i++) {
+      let initCouplingData = Array(couplingIndexWindow).fill(0);
+      const indexChart = await initFFTChart(
+        initCouplingData,
+        `index-${i + 1}`,
+        "white",
+        false
+      );
+      indexCharts.push(indexChart);
+      scalpCouplingIndices.push(initCouplingData);
+    }
+  }
+
   for (let i = 0; i < numChannels; i++) {
     if (showFFTs) {
       const xyDS = await initFFTChart(
@@ -103,51 +123,77 @@ async function initCharts() {
     }
   }
 
-  // Handle incoming messages
+  // Handle incoming data on socket for FFT & spectrogram
   socket.addEventListener("message", (event) => {
     console.log(`received data ${event}`);
     let data = event.data;
     let parsed = JSON.parse(data);
-    // console.log("parsed", parsed[1]);
-    // update FFT and spectrogram charts
     for (let i = 0; i < numChannels; i++) {
       if (parsed[i]) {
+        // do FFT on parsed[i] data
         const psdData = doFFT(parsed[i]);
-        let x = psdData.map((value, index) => index * freqSpacing);
+        let x = psdData.map((_, index) => index * freqSpacing);
+        // update FFT chart i
         if (showFFTs) {
           xyDScharts[i].clear();
           xyDScharts[i].appendRange(x, psdData);
         }
-        let max = Math.max(...psdData);
-        console.log("max value: ", max);
+        // let max = Math.max(...psdData);
+        // console.log("max value: ", max);
+        // update spectrogram chart i
         if (showSpectrograms) {
-          spectrogramValuesAllChannels[i].shift(); // TODO array of spectrogram values
+          spectrogramValuesAllChannels[i].shift();
           spectrogramValuesAllChannels[i].push(psdData);
           spectrogramDScharts[i].setZValues(spectrogramValuesAllChannels[i]);
         }
       }
     }
-    // TODO update scalpCouplingIndices
   });
+
+  // handle incoming data on anotherSocket for coupling indices
+  if (showCouplingIndices) {
+    anotherSocket.addEventListener("message", (event) => {
+      console.log(`received coupling index ${event}`);
+      let data = event.data;
+      let parsed = JSON.parse(data);
+      // console.log("parsed", parsed);
+      // update coupling index charts
+      for (let i = 0; i < numChannels / 2; i++) {
+        scalpCouplingIndices[i].shift();
+        scalpCouplingIndices[i].push(parsed[i]);
+        indexCharts[i].clear();
+        let xVals = Array.from(
+          { length: couplingIndexWindow },
+          (_, index) => index
+        );
+        indexCharts[i].appendRange(xVals, scalpCouplingIndices[i]);
+      }
+    });
+  }
 }
 
-async function initFFTChart(data, divId, colour) {
+async function initFFTChart(data, divId, colour, doFourier = true) {
   // LICENSING
   // Commercial licenses set your license code here
   // Purchased license keys can be viewed at https://www.scichart.com/profile
   // How-to steps at https://www.scichart.com/licensing-scichart-js/
-  SciChartSurface.setRuntimeLicenseKey(
-    "KaVEKkK+l4Ju2dJG8VMHXz76WtUxjNXp6YiAUlSH9LYGi9A5U69GaQCcVRCj/imnBfeHC6mbFXtsJufzS0JB2xrnAsQoHxMFaifN9460/Moc4BrXys2tfvayObZNoMkrh66iPG/a6wCNaeLLtqDE/YqdrmR+22pRt9k4Vu6gmdi/bDq9SuMoO/tsA5HFgmiRXfJcqj8O1LvfIZRMqmZKNE3dAr7kIQvjfK9GputCJoQL96JahutpcRun60RkIiEfPBCEPJvynHZdNkUNAyrjuETEfgzinU4/rAypgARbHMtfS5oZ+0W5XW6+3KdShlM7bA2ezmF3N0E8ln1mWtODVrcCpc5+xQLj7bFfEheAapTo8EISgDHPXtEmC3XBKJ/bU26JEeFt+n9fc4r/YRzwUeRTDFu72CnnyFxHwLR3EJaOlEaOiVl6pqGb3jCswwll1BcgbZWh5/cA4b17ssbgIGhHOQFAWHMkExHM8BvB+/ZEAN0ErK3rhywGP/doHFqJcDwrtaDbiSTSapjjpLDWSA3QtnddqIJrLMbXpNyR0EXx3Q98Wdl6ZyPcgu+dKQ=="
-  );
+  // SciChartSurface.setRuntimeLicenseKey(
+  //   "KaVEKkK+l4Ju2dJG8VMHXz76WtUxjNXp6YiAUlSH9LYGi9A5U69GaQCcVRCj/imnBfeHC6mbFXtsJufzS0JB2xrnAsQoHxMFaifN9460/Moc4BrXys2tfvayObZNoMkrh66iPG/a6wCNaeLLtqDE/YqdrmR+22pRt9k4Vu6gmdi/bDq9SuMoO/tsA5HFgmiRXfJcqj8O1LvfIZRMqmZKNE3dAr7kIQvjfK9GputCJoQL96JahutpcRun60RkIiEfPBCEPJvynHZdNkUNAyrjuETEfgzinU4/rAypgARbHMtfS5oZ+0W5XW6+3KdShlM7bA2ezmF3N0E8ln1mWtODVrcCpc5+xQLj7bFfEheAapTo8EISgDHPXtEmC3XBKJ/bU26JEeFt+n9fc4r/YRzwUeRTDFu72CnnyFxHwLR3EJaOlEaOiVl6pqGb3jCswwll1BcgbZWh5/cA4b17ssbgIGhHOQFAWHMkExHM8BvB+/ZEAN0ErK3rhywGP/doHFqJcDwrtaDbiSTSapjjpLDWSA3QtnddqIJrLMbXpNyR0EXx3Q98Wdl6ZyPcgu+dKQ=="
+  // );
+  SciChartSurface.UseCommunityLicense();
 
   // Initialize SciChartSurface. Don't forget to await!
   const { sciChartSurface, wasmContext } = await SciChartSurface.create(divId, {
     theme: new SciChartJsNavyTheme(),
-    title: "Power spectrum of signal " + divId.slice(-1),
-    titleStyle: { fontSize: 14, padding: 0 },
+    title: doFourier
+      ? "Power spectrum of signal " + divId.split("-")[1]
+      : "Coupling index of channel " + divId.split("-")[1],
+    titleStyle: { fontSize: 12, placeWithinChart: true },
   });
   let fftDS = new XyDataSeries(wasmContext, {
-    xValues: data.map((value, index) => index * freqSpacing),
+    xValues: data.map((value, index) =>
+      doFourier ? index * freqSpacing : index
+    ),
     yValues: data,
   });
 
@@ -155,27 +201,39 @@ async function initFFTChart(data, divId, colour) {
   const growBy = new NumberRange(0.1, 0.1);
   sciChartSurface.xAxes.add(
     new NumericAxis(wasmContext, {
-      axisTitle: "frequency (Hz)",
-      axisTitleStyle: { fontSize: 12 },
+      ...(doFourier
+        ? { axisTitle: "frequency (Hz)", axisTitleStyle: { fontSize: 12 } }
+        : {}),
+      ...(!doFourier ? { drawLabels: false } : {}),
       growBy,
     })
   );
-  sciChartSurface.yAxes.add(
-    new LogarithmicAxis(wasmContext, {
-      axisTitle: "Power",
-      axisTitleStyle: { fontSize: 12 },
-      logBase: 10,
-      // Format with E
-      labelFormat: ENumericFormat.Exponential,
-      labelPrecision: 1,
-      minorsPerMajor: 1,
-      // Adjust major/minor gridline style to make it clearer for the demo
-      majorGridLineStyle: { color: "#50C7E077" },
-      minorGridLineStyle: { color: "#50C7E033" },
-      visibleRange: new NumberRange(1, 1000_000_000),
-      growBy,
-    })
-  );
+  if (doFourier) {
+    sciChartSurface.yAxes.add(
+      new LogarithmicAxis(wasmContext, {
+        axisTitle: "Power",
+        axisTitleStyle: { fontSize: 12 },
+        logBase: 10,
+        // Format with E
+        labelFormat: ENumericFormat.Exponential,
+        labelPrecision: 1,
+        minorsPerMajor: 1,
+        // Adjust major/minor gridline style to make it clearer for the demo
+        majorGridLineStyle: { color: "#50C7E077" },
+        minorGridLineStyle: { color: "#50C7E033" },
+        visibleRange: new NumberRange(1, 1000_000_000),
+        growBy,
+      })
+    );
+  } else {
+    sciChartSurface.xAxes.DrawLabels = false;
+    sciChartSurface.yAxes.add(
+      new NumericAxis(wasmContext, {
+        autoRange: EAutoRange.Always,
+        growBy,
+      })
+    );
+  }
 
   // Create a line series with some initial data
   sciChartSurface.renderableSeries.add(
@@ -209,9 +267,10 @@ function doFFT(data) {
 }
 
 async function initSpectrogramChart(spectrogramValues, divId) {
+  SciChartSurface.UseCommunityLicense();
   const { sciChartSurface, wasmContext } = await SciChartSurface.create(divId, {
     theme: new SciChartJsNavyTheme(),
-    title: "Spectrogram " + divId.slice(-1),
+    title: "Spectrogram " + divId.split("-")[1],
     titleStyle: { fontSize: 12, placeWithinChart: true },
   });
 
@@ -273,18 +332,22 @@ export default function Home() {
             Array(numChannels)
               .fill(0)
               .map((_, i) => (
-                <div key={i} id={`scichart-root-${i}`} className="charts" />
+                <div
+                  key={`fft-${i}`}
+                  id={`scichart-root-${i}`}
+                  className="charts"
+                />
               ))}
 
           {showSpectrograms &&
             Object.keys(SDPairToChannel).map((key) => (
-              <div className="charts">
+              <div key={`SDpair-${key}`} className="charts">
                 <h3 className="text-center">
-                  SD Pair {key} ({SDPairToDescription[key]}) Score{" "}
-                  {scalpCouplingIndices[key]}
+                  SD Pair {key} ({SDPairToDescription[key]})
                 </h3>
+                <div key={`index-${key}`} id={`index-${key}`} />
                 {SDPairToChannel[key].map((channel, _) => (
-                  <div key={channel} id={`spectrogram-${channel}`} />
+                  <div key={`spec-${channel}`} id={`spectrogram-${channel}`} />
                 ))}
               </div>
             ))}
