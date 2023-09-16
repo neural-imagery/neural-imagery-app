@@ -187,7 +187,7 @@ async function initFFTChart(data, divId, colour, doFourier = true) {
     theme: new SciChartJsNavyTheme(),
     title: doFourier
       ? "Power spectrum of signal " + divId.split("-")[1]
-      : "Coupling index of channel " + divId.split("-")[1],
+      : "Coupling index of SD pair " + divId.split("-")[1],
     titleStyle: { fontSize: 12, placeWithinChart: true },
   });
   let fftDS = new XyDataSeries(wasmContext, {
@@ -229,7 +229,7 @@ async function initFFTChart(data, divId, colour, doFourier = true) {
     sciChartSurface.xAxes.DrawLabels = false;
     sciChartSurface.yAxes.add(
       new NumericAxis(wasmContext, {
-        autoRange: EAutoRange.Always,
+        visibleRange: new NumberRange(-1, 1),
         growBy,
       })
     );
@@ -338,19 +338,20 @@ export default function Home() {
                   className="charts"
                 />
               ))}
-
-          {showSpectrograms &&
-            Object.keys(SDPairToChannel).map((key) => (
-              <div key={`SDpair-${key}`} className="charts">
-                <h3 className="text-center">
-                  SD Pair {key} ({SDPairToDescription[key]})
-                </h3>
+          {Object.keys(SDPairToChannel).map((key) => (
+            <div key={`SDpair-${key}`} className="charts">
+              <h3 className="text-center">
+                SD Pair {key} ({SDPairToDescription[key]})
+              </h3>
+              {showCouplingIndices && (
                 <div key={`index-${key}`} id={`index-${key}`} />
-                {SDPairToChannel[key].map((channel, _) => (
+              )}
+              {showSpectrograms &&
+                SDPairToChannel[key].map((channel, _) => (
                   <div key={`spec-${channel}`} id={`spectrogram-${channel}`} />
                 ))}
-              </div>
-            ))}
+            </div>
+          ))}
         </div>
       </div>
     </main>
