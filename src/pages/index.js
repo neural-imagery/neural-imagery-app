@@ -5,6 +5,7 @@ import FFT from "fft.js";
 // import Plot from "react-plotly.js";
 import {
   EAutoRange,
+  EAxisAlignment,
   UniformHeatmapDataSeries,
   UniformHeatmapRenderableSeries,
   HeatmapColorMap,
@@ -276,7 +277,9 @@ async function initSpectrogramChart(spectrogramValues, divId) {
 
   const xAxis = new NumericAxis(wasmContext, {
     autoRange: EAutoRange.Always,
-    drawLabels: false,
+    axisAlignment: EAxisAlignment.Left,
+    flippedCoordinates: true,
+    // drawLabels: false,
     drawMinorTickLines: false,
     drawMajorTickLines: false,
   });
@@ -284,6 +287,7 @@ async function initSpectrogramChart(spectrogramValues, divId) {
 
   const yAxis = new NumericAxis(wasmContext, {
     autoRange: EAutoRange.Always,
+    axisAlignment: EAxisAlignment.Top,
     drawLabels: false,
     drawMinorTickLines: false,
     drawMajorTickLines: false,
@@ -292,7 +296,7 @@ async function initSpectrogramChart(spectrogramValues, divId) {
 
   let spectrogramDS = new UniformHeatmapDataSeries(wasmContext, {
     xStart: 0,
-    xStep: 1,
+    xStep: freqSpacing,
     yStart: 0,
     yStep: 1,
     zValues: spectrogramValues,
@@ -302,7 +306,7 @@ async function initSpectrogramChart(spectrogramValues, divId) {
     dataSeries: spectrogramDS,
     colorMap: new HeatmapColorMap({
       minimum: 0,
-      maximum: 503345012, // TODO take printed max value, reduce by 2-3 orders of magnitude
+      maximum: 53345012, // TODO take printed max value, reduce by 2-3 orders of magnitude
       gradientStops: [
         { offset: 0, color: "#000000" },
         { offset: 0.25, color: "#800080" },
