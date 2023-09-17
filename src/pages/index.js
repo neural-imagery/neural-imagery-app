@@ -34,25 +34,12 @@ const couplingIndexWindow = 50;
 
 const inter = Inter({ subsets: ["latin"] });
 
-// TODO dictionary of source-detector pair (1-16) to corresp channel numbers (0-31)
-const SDPairToChannel = {
-  1: [0, 1],
-  2: [2, 3],
-  3: [4, 5],
-  4: [6, 7],
-  5: [8, 9],
-  6: [10, 11],
-  7: [12, 13],
-  8: [14, 15],
-  9: [16, 17],
-  10: [18, 19],
-  11: [20, 21],
-  12: [22, 23],
-  13: [24, 25],
-  14: [26, 27],
-  15: [28, 29],
-  16: [30, 31],
-};
+// dictionary of source-detector pair (1-16) to corresp channel numbers (0-31)
+// SD pair 1: channels [0, 16], 2: [1, 17], etc.
+const SDPairToChannel = [...Array(16).keys()].reduce(
+  (acc, i) => ((acc[i + 1] = [i, i + 16]), acc),
+  {}
+);
 
 const SDPairToDescription = {
   1: "S1 <> D1",
@@ -75,11 +62,11 @@ const SDPairToDescription = {
 
 async function initCharts() {
   // WebSocket URL -  35.186.191.80:8080 if external server, 127.0.0.1:8080 if local
-  const socketURL = "ws://35.186.191.80:8080/";
+  const socketURL = "ws://35.186.191.80:9001/device_data";
   // Create a WebSocket connection
   const socket = new WebSocket(socketURL);
   // Create another socket URL and connection
-  const anotherSocketURL = "ws://35.186.191.80:8081/";
+  const anotherSocketURL = "ws://35.186.191.80:9001/signal_quality";
   const anotherSocket = new WebSocket(anotherSocketURL);
   let xyDScharts = [];
   let spectrogramDScharts = [];
